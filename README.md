@@ -2,25 +2,34 @@
 
 A cross-platform mobile application built with Flutter that enables your phone to function as a professional webcam, streaming video to your computer over NDI (Network Device Interface).
 
+📖 **[Quick Start Guide](QUICKSTART.md)** | 🛠️ **[Development Guide](DEVELOPMENT.md)** | 🤝 **[Contributing](CONTRIBUTING.md)** | 📝 **[Changelog](CHANGELOG.md)**
+
 ## Features
 
-### 1. Camera Selection
+### 📸 1. Camera Selection
 - Choose between front and back cameras
 - Support for wide-angle cameras
 - Support for telephoto cameras
 - Automatic detection of available camera types
 
-### 2. Portrait/Bokeh Mode
+### 🎨 2. Portrait/Bokeh Mode
 - Option to enable portrait mode when available
 - Creates professional-looking background blur effect
 
-### 3. Streaming Quality Options
+### 🎥 3. Streaming Quality Options
 - **4K 30fps (Max Quality)** - Ultra-high definition for maximum detail
 - **4K (Ultra High)** - High resolution streaming
 - **1080p 60fps (Very High)** - Full HD with smooth motion
 - **1080p 30fps (High)** - Standard Full HD quality
 - **720p (Medium)** - Balanced quality and performance
 - **480p (Low)** - Lower bandwidth option
+
+### ✨ Additional Features
+- 🔴 Real-time LIVE indicator while streaming
+- 🎛️ Easy-to-use camera switching controls
+- 📊 Multiple quality presets
+- 🔐 Secure permission handling
+- 📱 Cross-platform support (Android & iOS)
 
 ## Setup Instructions
 
