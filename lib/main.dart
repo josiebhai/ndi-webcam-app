@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'ndi_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +45,7 @@ class _CameraScreenState extends State<CameraScreen> {
   ResolutionPreset _selectedQuality = ResolutionPreset.high;
   bool _isStreaming = false;
   bool _permissionGranted = false;
+  final NDIService _ndiService = NDIService();
 
   final Map<ResolutionPreset, String> _qualityOptions = {
     ResolutionPreset.max: '4K 30fps (Max Quality)',
@@ -118,33 +120,54 @@ class _CameraScreenState extends State<CameraScreen> {
     return '';
   }
 
-  void _toggleStreaming() {
-    setState(() {
-      _isStreaming = !_isStreaming;
-    });
-    
+  Future<void> _toggleStreaming() async {
     if (_isStreaming) {
-      // In a real implementation, this would start NDI streaming
-      // For now, we just toggle the state
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('NDI Streaming Started'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
+      await _ndiService.stopStreaming();
+      setState(() {
+        _isStreaming = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('NDI Streaming Stopped'),
           backgroundColor: Colors.orange,
         ),
       );
+    } else {
+      // Initialize NDI service
+      final initialized = await _ndiService.initialize(
+        cameraController: _controller!,
+        streamName: 'NDI Webcam',
+        quality: _selectedQuality,
+      );
+      
+      if (initialized) {
+        final started = await _ndiService.startStreaming();
+        if (started) {
+          setState(() {
+            _isStreaming = true;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('NDI Streaming Started'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to start NDI streaming'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
 
   @override
   void dispose() {
     _controller?.dispose();
+    _ndiService.dispose();
     super.dispose();
   }
 
