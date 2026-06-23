@@ -30,6 +30,8 @@ targets:
   NDIWebcam:
     type: application
     platform: iOS
+    entitlements:
+      path: NDIWebcam/NDIWebcam.entitlements
     sources:
       - path: NDIWebcam
         excludes:
@@ -55,6 +57,10 @@ targets:
         CFBundleVersion: "1"
         NSCameraUsageDescription: "NDI Webcam uses your camera to stream live video."
         NSMicrophoneUsageDescription: "NDI Webcam uses your microphone to stream live audio."
+        NSLocalNetworkUsageDescription: "NDI Webcam broadcasts video to OBS, vMix, and other NDI receivers on your local network."
+        NSBonjourServices:
+          - "_ndi._tcp."
+          - "_ndi._udp."
         UIRequiresFullScreen: true
         UIStatusBarHidden: false
         UISupportedInterfaceOrientations:

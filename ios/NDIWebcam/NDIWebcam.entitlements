@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for NDI mDNS discovery — NDI uses multicast UDP to advertise sources on the LAN. -->
+    <!-- For App Store distribution this entitlement requires Apple approval via the request form. -->
+    <!-- For development/sideloading on your own device it works without special approval. -->
+    <key>com.apple.developer.networking.multicast</key>
+    <true/>
+</dict>
+</plist>
