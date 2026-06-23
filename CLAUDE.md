@@ -8,7 +8,7 @@ Two fully independent native codebases — no shared runtime, no cross-platform 
 
 | Platform | Language | Min OS | Camera API | NDI Integration |
 |---|---|---|---|---|
-| iOS | Swift 5.9 | iOS 14 | AVFoundation | NDIlib.xcframework (C bridge) |
+| iOS | Swift 5.9 | iOS 14 | AVFoundation | libndi_ios.a static lib + headers (C bridge) |
 | Android | Kotlin | API 26 (Android 8) | Camera2 | libndi.so via JNI (C++) |
 
 Active PR: https://github.com/josiebhai/ndi-webcam-app/pull/3
@@ -21,8 +21,12 @@ Working branch: `claude/elegant-bell-v5i0nj`
 The Vizrt NDI SDK is **free but not included** in this repo — it requires accepting their license agreement.
 
 1. Download from https://ndi.video/for-developers/ndi-sdk/
-2. **iOS** — copy `NDIlib.xcframework` into `ios/Frameworks/`
-3. **Android** — copy:
+
+2. **iOS** — run `Install_NDI_SDK_v6_Apple.pkg`, then copy from `/Library/NDI SDK for Apple/`:
+   - `lib/iOS/libndi_ios.a` → `ios/Frameworks/libndi_ios.a`
+   - entire `include/` folder → `ios/include/`
+
+3. **Android** — extract `NDI 6 SDK (Android).exe` (use `7z x` on Mac), then copy:
    - `.aar` file → `android/app/libs/`
    - `.so` files per ABI → `android/app/src/main/jniLibs/arm64-v8a/`, `armeabi-v7a/`, `x86_64/`
    - Header files → `android/app/src/main/cpp/include/`

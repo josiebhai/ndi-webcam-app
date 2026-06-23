@@ -1,5 +1,6 @@
 # NDI SDK — must be downloaded separately from https://ndi.video/for-developers/ndi-sdk/
-ios/Frameworks/NDIlib.xcframework
+ios/Frameworks/libndi_ios.a
+ios/include/
 android/app/libs/*.aar
 android/app/src/main/jniLibs/
 android/app/src/main/cpp/include/

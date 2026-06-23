@@ -15,10 +15,14 @@ settings:
     CURRENT_PROJECT_VERSION: 1
     TARGETED_DEVICE_FAMILY: "1,2"
     SWIFT_OBJC_BRIDGING_HEADER: NDIWebcam/NDIWebcam-Bridging-Header.h
-    FRAMEWORK_SEARCH_PATHS:
+    LIBRARY_SEARCH_PATHS:
       - "$(PROJECT_DIR)/Frameworks"
       - "$(inherited)"
+    HEADER_SEARCH_PATHS:
+      - "$(PROJECT_DIR)/include"
+      - "$(inherited)"
     OTHER_LDFLAGS:
+      - "-lndi_ios"
       - "-lc++"
       - "$(inherited)"
 
@@ -31,8 +35,8 @@ targets:
         excludes:
           - "**/*.md"
     frameworks:
-      - path: Frameworks/NDIlib.xcframework
-        embed: true
+      - path: Frameworks/libndi_ios.a
+        embed: false
         link: true
       - SDK: AVFoundation.framework
       - SDK: AVKit.framework
