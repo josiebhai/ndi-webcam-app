@@ -1,0 +1,79 @@
+name: NDIWebcam
+options:
+  bundleIdPrefix: com.ndiwebcam
+  deploymentTarget:
+    iOS: "14.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: ""  # set your Apple Developer Team ID here
+    PRODUCT_BUNDLE_IDENTIFIER: com.ndiwebcam.app
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: 1
+    TARGETED_DEVICE_FAMILY: "1,2"
+    SWIFT_OBJC_BRIDGING_HEADER: NDIWebcam/NDIWebcam-Bridging-Header.h
+    LIBRARY_SEARCH_PATHS:
+      - "$(PROJECT_DIR)/Frameworks"
+      - "$(inherited)"
+    HEADER_SEARCH_PATHS:
+      - "$(PROJECT_DIR)/include"
+      - "$(inherited)"
+    OTHER_LDFLAGS:
+      - "-lndi_ios"
+      - "-lc++"
+      - "$(inherited)"
+
+targets:
+  NDIWebcam:
+    type: application
+    platform: iOS
+    entitlements:
+      path: NDIWebcam/NDIWebcam.entitlements
+    sources:
+      - path: NDIWebcam
+        excludes:
+          - "**/*.md"
+    frameworks:
+      - path: Frameworks/libndi_ios.a
+        embed: false
+        link: true
+      - SDK: AVFoundation.framework
+      - SDK: AVKit.framework
+      - SDK: AudioToolbox.framework
+      - SDK: VideoToolbox.framework
+      - SDK: CoreMedia.framework
+      - SDK: CoreVideo.framework
+      - SDK: Network.framework
+      - SDK: UIKit.framework
+    info:
+      path: NDIWebcam/Info.plist
+      properties:
+        CFBundleName: NDI Webcam
+        CFBundleDisplayName: NDI Webcam
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        NSCameraUsageDescription: "NDI Webcam uses your camera to stream live video."
+        NSMicrophoneUsageDescription: "NDI Webcam uses your microphone to stream live audio."
+        NSLocalNetworkUsageDescription: "NDI Webcam broadcasts video to OBS, vMix, and other NDI receivers on your local network."
+        NSBonjourServices:
+          - "_ndi._tcp."
+          - "_ndi._udp."
+        UIRequiresFullScreen: true
+        UIStatusBarHidden: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - audio
+        UILaunchScreen:
+          UIColorName: systemBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate

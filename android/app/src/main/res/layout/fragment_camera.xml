@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <!-- Camera preview -->
+    <TextureView
+        android:id="@+id/texture_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Tally indicator (top-right red dot when streaming) -->
+    <View
+        android:id="@+id/tally_indicator"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:background="@drawable/tally_dot"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp" />
+
+    <!-- Manual controls panel (hidden by default) -->
+    <LinearLayout
+        android:id="@+id/manual_controls_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#AA000000"
+        android:padding="12dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/bottom_bar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="8dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp">
+
+        <!-- Exposure bias -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="8dp">
+            <TextView android:layout_width="64dp" android:layout_height="wrap_content" android:text="EV" android:textColor="@android:color/white" android:textSize="12sp"/>
+            <SeekBar android:id="@+id/seek_exposure" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            <TextView android:id="@+id/label_exposure_value" android:layout_width="48dp" android:layout_height="wrap_content" android:text="0" android:textColor="#AAAAAA" android:textSize="12sp" android:textAlignment="textEnd"/>
+        </LinearLayout>
+
+        <!-- ISO -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="8dp">
+            <TextView android:layout_width="64dp" android:layout_height="wrap_content" android:text="ISO" android:textColor="@android:color/white" android:textSize="12sp"/>
+            <SeekBar android:id="@+id/seek_iso" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            <TextView android:id="@+id/label_iso_value" android:layout_width="48dp" android:layout_height="wrap_content" android:text="Auto" android:textColor="#AAAAAA" android:textSize="12sp" android:textAlignment="textEnd"/>
+        </LinearLayout>
+
+        <!-- Shutter -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="8dp">
+            <TextView android:layout_width="64dp" android:layout_height="wrap_content" android:text="Shutter" android:textColor="@android:color/white" android:textSize="12sp"/>
+            <SeekBar android:id="@+id/seek_shutter" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            <TextView android:id="@+id/label_shutter_value" android:layout_width="48dp" android:layout_height="wrap_content" android:text="Auto" android:textColor="#AAAAAA" android:textSize="12sp" android:textAlignment="textEnd"/>
+        </LinearLayout>
+
+        <!-- White balance preset buttons -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+            <TextView android:layout_width="64dp" android:layout_height="wrap_content" android:text="WB" android:textColor="@android:color/white" android:textSize="12sp"/>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_wb_auto"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="Auto"
+                android:textSize="11sp"
+                android:layout_marginEnd="8dp"/>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_wb_daylight"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="Daylight"
+                android:textSize="11sp"/>
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Bottom controls bar -->
+    <LinearLayout
+        android:id="@+id/bottom_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="24dp"
+        android:weightSum="4"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageButton
+            android:id="@+id/btn_switch_camera"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:src="@drawable/ic_camera_switch"
+            android:tint="@android:color/white"
+            android:contentDescription="Switch camera" />
+
+        <ImageButton
+            android:id="@+id/btn_torch"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:src="@drawable/ic_torch"
+            android:tint="@android:color/white"
+            android:contentDescription="Torch" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_stream"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1.5"
+            android:text="Go Live"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btn_manual_controls"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="0.5"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_menu_manage"
+            android:tint="@android:color/white"
+            android:contentDescription="Manual controls" />
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
