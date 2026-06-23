@@ -1,0 +1,43 @@
+# NDI SDK — must be downloaded separately from https://ndi.video/for-developers/ndi-sdk/
+ios/Frameworks/NDIlib.xcframework
+android/app/libs/*.aar
+android/app/src/main/jniLibs/
+android/app/src/main/cpp/include/
+
+# Xcode
+ios/*.xcodeproj
+ios/*.xcworkspace
+ios/NDIWebcam.xcodeproj/xcuserdata/
+ios/DerivedData/
+*.xccheckout
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xcscmblueprint
+*.xcscheme
+
+# Android
+android/.gradle/
+android/local.properties
+android/build/
+android/app/build/
+android/*.iml
+android/.idea/
+android/captures/
+android/app/release/
+android/**/*.keystore
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# IDE
+.vscode/
+*.swp

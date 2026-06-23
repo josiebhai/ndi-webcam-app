@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This layout is used when ManualControlsFragment is shown as a bottom sheet -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#AA000000">
+
+    <!-- Defined inline in fragment_camera.xml for inline panel; this file
+         is the standalone version if shown as a bottom sheet in the future. -->
+
+</LinearLayout>
