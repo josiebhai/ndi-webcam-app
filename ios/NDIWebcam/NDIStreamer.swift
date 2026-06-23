@@ -120,7 +120,7 @@ final class NDIStreamer {
         frame.no_samples  = sampleCount
         frame.timecode    = Int64(bitPattern: 0x8000000000000000)
         frame.FourCC      = NDIlib_FourCC_audio_type_FLTP
-        frame.p_data      = rawData.assumingMemoryBound(to: Float.self)
+        frame.p_data      = rawData.assumingMemoryBound(to: UInt8.self)
         frame.channel_stride_in_bytes = sampleCount * Int32(MemoryLayout<Float>.size)
 
         sendQueue.async { [instance] in
