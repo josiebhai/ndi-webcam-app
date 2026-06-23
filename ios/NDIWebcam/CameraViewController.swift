@@ -6,7 +6,7 @@ final class CameraViewController: UIViewController {
 
     // MARK: Dependencies
 
-    private let ndiStreamer  = NDIStreamer()
+    private let ndiStreamer   = NDIStreamer()
     private let audioManager = AudioManager()
     private var cancellables = Set<AnyCancellable>()
 
@@ -16,28 +16,48 @@ final class CameraViewController: UIViewController {
     private let videoOutput    = AVCaptureVideoDataOutput()
     private let audioOutput    = AVCaptureAudioDataOutput()
     private let captureQueue   = DispatchQueue(label: "com.ndiwebcam.capture", qos: .userInteractive)
-    // All AVCaptureDevice lockForConfiguration calls go here — never block the main thread.
     private let configQueue    = DispatchQueue(label: "com.ndiwebcam.config",  qos: .userInitiated)
     private var currentDevice: AVCaptureDevice?
     private var previewLayer: AVCaptureVideoPreviewLayer!
     private var usingFrontCamera = false
+    private var micMuted = false
 
     // MARK: Settings
 
     private var targetFPS: Int32 = 30
     private var targetResolution: AVCaptureSession.Preset = .hd1920x1080
 
-    // MARK: UI
+    // MARK: UI – Preview
 
     private let previewContainer = UIView()
-    private let streamButton     = UIButton(type: .system)
+
+    // MARK: UI – Top bar
+
+    private let torchButton   = UIButton(type: .system)
+    private let filterButton  = UIButton(type: .system)
+    private let sourceButton  = UIButton(type: .system)
+    private let settingsButton = UIButton(type: .system)
+
+    // MARK: UI – Camera toolbar
+
+    private let toolbarView  = UIView()
+    private let tbTorchBtn   = UIButton(type: .system)
+    private let tbFilterBtn  = UIButton(type: .system)
+    private let tbMicBtn     = UIButton(type: .system)
+    private let tbAspectBtn  = UIButton(type: .system)
+    private let tbEVBtn      = UIButton(type: .system)
+    private let tbTimerBtn   = UIButton(type: .system)
+
+    // MARK: UI – Bottom controls
+
+    private let streamButton     = UIButton(type: .custom)
     private let switchButton     = UIButton(type: .system)
-    private let torchButton      = UIButton(type: .system)
-    private let settingsButton   = UIButton(type: .system)
-    private let controlsToggle   = UIButton(type: .system)
-    private let manualControls   = ManualControlsView()
-    private let statusLabel      = UILabel()
-    private let tallyView        = UIView()
+    private let connectionsView  = UIView()
+    private let connectionsLabel = UILabel()
+
+    // MARK: UI – Manual controls
+
+    private let manualControls = ManualControlsView()
     private var statusTimer: Timer?
 
     // MARK: Lifecycle
@@ -54,13 +74,17 @@ final class CameraViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        navigationController?.setNavigationBarHidden(true, animated: animated)
         if !captureSession.isRunning {
             captureQueue.async { self.captureSession.startRunning() }
         }
+        let sourceName = UserDefaults.standard.string(forKey: "sourceName") ?? UIDevice.current.name
+        sourceButton.setTitle(sourceName, for: .normal)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        navigationController?.setNavigationBarHidden(false, animated: animated)
         if captureSession.isRunning { captureSession.stopRunning() }
         if ndiStreamer.isStreaming { stopStreaming() }
     }
@@ -113,7 +137,6 @@ final class CameraViewController: UIViewController {
 
         configureFPS(device: device, fps: targetFPS)
 
-        // Sync slider ranges to this device's actual capabilities.
         DispatchQueue.main.async { [weak self] in
             self?.updateDeviceRanges(device: device)
         }
@@ -157,7 +180,6 @@ final class CameraViewController: UIViewController {
         }
     }
 
-    // Reads actual ISO and shutter limits from the active format and updates the sliders.
     private func updateDeviceRanges(device: AVCaptureDevice) {
         let fmt = device.activeFormat
         manualControls.isoRange = fmt.minISO...fmt.maxISO
@@ -180,10 +202,10 @@ final class CameraViewController: UIViewController {
         let sourceName = UserDefaults.standard.string(forKey: "sourceName") ?? UIDevice.current.name
         do {
             try ndiStreamer.start(sourceName: sourceName)
-            streamButton.setTitle("Stop", for: .normal)
-            streamButton.tintColor = .systemRed
-            tallyView.backgroundColor = .systemRed
-            tallyView.isHidden = false
+            streamButton.backgroundColor = .systemRed
+            streamButton.layer.borderColor = UIColor.systemRed.cgColor
+            previewContainer.layer.borderWidth = 3
+            previewContainer.layer.borderColor = UIColor.systemRed.cgColor
             startStatusUpdates()
         } catch {
             showAlert("Stream Error", message: error.localizedDescription)
@@ -192,11 +214,11 @@ final class CameraViewController: UIViewController {
 
     private func stopStreaming() {
         ndiStreamer.stop()
-        streamButton.setTitle("Go Live", for: .normal)
-        streamButton.tintColor = .white
-        tallyView.isHidden = true
+        streamButton.backgroundColor = .white
+        streamButton.layer.borderColor = UIColor(white: 0.85, alpha: 1).cgColor
+        previewContainer.layer.borderWidth = 0
         statusTimer?.invalidate()
-        statusLabel.text = "Ready"
+        connectionsLabel.text = "0"
     }
 
     // MARK: Camera Controls
@@ -223,9 +245,36 @@ final class CameraViewController: UIViewController {
 
     private func updateTorchButton() {
         guard let device = currentDevice else { return }
-        let active = device.hasTorch && !usingFrontCamera && device.torchMode == .on
-        torchButton.tintColor = active ? .systemYellow : .white
-        torchButton.isEnabled = !usingFrontCamera && (currentDevice?.hasTorch ?? false)
+        let active    = device.hasTorch && !usingFrontCamera && device.torchMode == .on
+        let isEnabled = !usingFrontCamera && (currentDevice?.hasTorch ?? false)
+
+        torchButton.tintColor        = active ? .systemYellow : .white
+        torchButton.backgroundColor  = active
+            ? UIColor.systemYellow.withAlphaComponent(0.25)
+            : UIColor(white: 0.2, alpha: 0.75)
+        torchButton.isEnabled        = isEnabled
+
+        tbTorchBtn.tintColor  = active ? .systemYellow : .white
+        tbTorchBtn.isEnabled  = isEnabled
+    }
+
+    @objc private func toggleMic() {
+        micMuted.toggle()
+        let imgName = micMuted ? "mic.slash.fill" : "mic.slash"
+        let config  = UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+        tbMicBtn.setImage(UIImage(systemName: imgName, withConfiguration: config), for: .normal)
+        tbMicBtn.tintColor = micMuted ? .systemOrange : .white
+    }
+
+    @objc private func toggleFilter() {
+        let isActive = filterButton.tintColor == UIColor.systemYellow
+        let newColor: UIColor = isActive ? .white : .systemYellow
+        filterButton.tintColor = newColor
+        tbFilterBtn.tintColor  = newColor
+    }
+
+    @objc private func toggleAspect() {
+        // Placeholder for future aspect ratio switching
     }
 
     @objc private func openSettings() {
@@ -236,6 +285,7 @@ final class CameraViewController: UIViewController {
         UIView.animate(withDuration: 0.25) {
             self.manualControls.isHidden.toggle()
         }
+        tbEVBtn.tintColor = manualControls.isHidden ? .white : .systemYellow
     }
 
     // MARK: Tap to Focus
@@ -270,9 +320,7 @@ final class CameraViewController: UIViewController {
     private func startStatusUpdates() {
         statusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self else { return }
-            let count  = self.ndiStreamer.connectedReceiverCount
-            let suffix = count == 1 ? "receiver" : "receivers"
-            self.statusLabel.text = "\(count) \(suffix)"
+            self.connectionsLabel.text = "\(self.ndiStreamer.connectedReceiverCount)"
         }
     }
 
@@ -285,12 +333,7 @@ final class CameraViewController: UIViewController {
     // MARK: UI Layout
 
     private func setupUI() {
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: "gear"),
-            style: .plain,
-            target: self, action: #selector(openSettings)
-        )
-
+        // Full-screen preview behind everything
         previewContainer.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(previewContainer)
 
@@ -301,75 +344,238 @@ final class CameraViewController: UIViewController {
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         previewContainer.addGestureRecognizer(tap)
 
-        tallyView.backgroundColor = .systemRed
-        tallyView.layer.cornerRadius = 8
-        tallyView.isHidden = true
-        tallyView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(tallyView)
+        // ── TOP BAR ──────────────────────────────────────────────────────────
 
-        statusLabel.text      = "Ready"
-        statusLabel.textColor = .white
-        statusLabel.font      = .systemFont(ofSize: 14)
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(statusLabel)
+        let topBar = UIView()
+        topBar.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(topBar)
 
-        let bottomBar = UIStackView()
-        bottomBar.axis         = .horizontal
-        bottomBar.spacing      = 20
-        bottomBar.alignment    = .center
-        bottomBar.distribution = .equalSpacing
-        bottomBar.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(bottomBar)
+        configureCircleButton(torchButton,    systemImage: "bolt.fill",       action: #selector(toggleTorch))
+        configureCircleButton(filterButton,   systemImage: "camera.filters",  action: #selector(toggleFilter))
+        configureCircleButton(settingsButton, systemImage: "gearshape.fill",  action: #selector(openSettings))
+        torchButton.translatesAutoresizingMaskIntoConstraints   = false
+        filterButton.translatesAutoresizingMaskIntoConstraints  = false
+        settingsButton.translatesAutoresizingMaskIntoConstraints = false
+        topBar.addSubview(torchButton)
+        topBar.addSubview(filterButton)
+        topBar.addSubview(settingsButton)
 
-        configureButton(switchButton,   systemImage: "arrow.triangle.2.circlepath.camera", action: #selector(switchCamera))
-        configureButton(torchButton,    systemImage: "flashlight.off.fill",                action: #selector(toggleTorch))
-        configureButton(controlsToggle, systemImage: "slider.horizontal.3",               action: #selector(toggleManualControls))
+        let sourceName = UserDefaults.standard.string(forKey: "sourceName") ?? UIDevice.current.name
+        sourceButton.setTitle(sourceName, for: .normal)
+        sourceButton.setImage(
+            UIImage(systemName: "chevron.down",
+                    withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .medium)),
+            for: .normal
+        )
+        sourceButton.semanticContentAttribute = .forceRightToLeft
+        sourceButton.tintColor               = .white
+        sourceButton.titleLabel?.font        = .systemFont(ofSize: 14, weight: .medium)
+        sourceButton.backgroundColor         = UIColor(white: 0.15, alpha: 0.75)
+        sourceButton.layer.cornerRadius      = 16
+        sourceButton.clipsToBounds           = true
+        sourceButton.contentEdgeInsets       = UIEdgeInsets(top: 8, left: 14, bottom: 8, right: 10)
+        sourceButton.imageEdgeInsets         = UIEdgeInsets(top: 0, left: 6, bottom: 0, right: 0)
+        sourceButton.translatesAutoresizingMaskIntoConstraints = false
+        topBar.addSubview(sourceButton)
 
-        streamButton.setTitle("Go Live", for: .normal)
-        streamButton.tintColor = .white
-        streamButton.titleLabel?.font = .boldSystemFont(ofSize: 18)
+        // ── CAMERA TOOLBAR ───────────────────────────────────────────────────
+
+        toolbarView.backgroundColor     = UIColor(white: 0.1, alpha: 0.88)
+        toolbarView.layer.cornerRadius  = 20
+        toolbarView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(toolbarView)
+
+        let tbStack = UIStackView()
+        tbStack.axis         = .horizontal
+        tbStack.distribution = .fillEqually
+        tbStack.alignment    = .center
+        tbStack.translatesAutoresizingMaskIntoConstraints = false
+        toolbarView.addSubview(tbStack)
+
+        configureToolbarButton(tbTorchBtn,  systemImage: "bolt.fill",      action: #selector(toggleTorch))
+        configureToolbarButton(tbFilterBtn, systemImage: "camera.filters", action: #selector(toggleFilter))
+        configureToolbarButton(tbMicBtn,    systemImage: "mic.slash",      action: #selector(toggleMic))
+        configureToolbarButton(tbAspectBtn, systemImage: nil,              action: #selector(toggleAspect))
+        tbAspectBtn.setTitle("4:3", for: .normal)
+        tbAspectBtn.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
+        configureToolbarButton(tbEVBtn,    systemImage: "plusminus",       action: #selector(toggleManualControls))
+        configureToolbarButton(tbTimerBtn, systemImage: "timer",           action: nil)
+
+        [tbTorchBtn, tbFilterBtn, tbMicBtn, tbAspectBtn, tbEVBtn, tbTimerBtn].forEach {
+            tbStack.addArrangedSubview($0)
+        }
+
+        // ── BOTTOM CONTROLS ──────────────────────────────────────────────────
+
+        let bottomView = UIView()
+        bottomView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(bottomView)
+
+        // Connections indicator (bottom-left)
+        connectionsView.backgroundColor    = UIColor(white: 0.12, alpha: 0.88)
+        connectionsView.layer.cornerRadius = 14
+        connectionsView.translatesAutoresizingMaskIntoConstraints = false
+        bottomView.addSubview(connectionsView)
+
+        let connIconCfg  = UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        let connIconView = UIImageView(image: UIImage(systemName: "dot.radiowaves.right", withConfiguration: connIconCfg))
+        connIconView.tintColor    = UIColor.white.withAlphaComponent(0.65)
+        connIconView.contentMode  = .scaleAspectFit
+        connIconView.translatesAutoresizingMaskIntoConstraints = false
+        connectionsView.addSubview(connIconView)
+
+        connectionsLabel.text      = "0"
+        connectionsLabel.textColor = .white
+        connectionsLabel.font      = .monospacedDigitSystemFont(ofSize: 17, weight: .bold)
+        connectionsLabel.textAlignment = .center
+        connectionsLabel.translatesAutoresizingMaskIntoConstraints = false
+        connectionsView.addSubview(connectionsLabel)
+
+        // Stream button — large white circle (center)
+        streamButton.backgroundColor      = .white
+        streamButton.layer.cornerRadius   = 36
+        streamButton.layer.borderWidth    = 3
+        streamButton.layer.borderColor    = UIColor(white: 0.85, alpha: 1).cgColor
+        streamButton.clipsToBounds        = true
         streamButton.addTarget(self, action: #selector(toggleStreaming), for: .touchUpInside)
+        streamButton.translatesAutoresizingMaskIntoConstraints = false
+        bottomView.addSubview(streamButton)
 
-        bottomBar.addArrangedSubview(switchButton)
-        bottomBar.addArrangedSubview(torchButton)
-        bottomBar.addArrangedSubview(streamButton)
-        bottomBar.addArrangedSubview(controlsToggle)
+        // Inner decorative ring
+        let innerRing                     = UIView()
+        innerRing.backgroundColor         = .clear
+        innerRing.layer.cornerRadius      = 29
+        innerRing.layer.borderWidth       = 1.5
+        innerRing.layer.borderColor       = UIColor(white: 0.6, alpha: 0.4).cgColor
+        innerRing.isUserInteractionEnabled = false
+        innerRing.translatesAutoresizingMaskIntoConstraints = false
+        streamButton.addSubview(innerRing)
+
+        // Switch camera button (bottom-right)
+        let switchCfg = UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+        switchButton.setImage(UIImage(systemName: "arrow.triangle.2.circlepath.camera.fill", withConfiguration: switchCfg), for: .normal)
+        switchButton.tintColor        = .white
+        switchButton.backgroundColor  = UIColor(white: 0.2, alpha: 0.8)
+        switchButton.layer.cornerRadius = 24
+        switchButton.clipsToBounds    = true
+        switchButton.addTarget(self, action: #selector(switchCamera), for: .touchUpInside)
+        switchButton.translatesAutoresizingMaskIntoConstraints = false
+        bottomView.addSubview(switchButton)
+
+        // ── MANUAL CONTROLS (above toolbar, hidden by default) ───────────────
 
         manualControls.delegate = self
         manualControls.isHidden = true
         manualControls.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(manualControls)
 
+        // ── CONSTRAINTS ───────────────────────────────────────────────────────
+
         NSLayoutConstraint.activate([
+            // Preview — full screen
             previewContainer.topAnchor.constraint(equalTo: view.topAnchor),
             previewContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             previewContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             previewContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            tallyView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-            tallyView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            tallyView.widthAnchor.constraint(equalToConstant: 16),
-            tallyView.heightAnchor.constraint(equalToConstant: 16),
+            // Top bar
+            topBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+            topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            topBar.heightAnchor.constraint(equalToConstant: 44),
 
-            statusLabel.centerYAnchor.constraint(equalTo: tallyView.centerYAnchor),
-            statusLabel.trailingAnchor.constraint(equalTo: tallyView.leadingAnchor, constant: -8),
+            torchButton.leadingAnchor.constraint(equalTo: topBar.leadingAnchor),
+            torchButton.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
+            torchButton.widthAnchor.constraint(equalToConstant: 40),
+            torchButton.heightAnchor.constraint(equalToConstant: 40),
 
-            bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
-            bottomBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-            bottomBar.heightAnchor.constraint(equalToConstant: 52),
+            filterButton.leadingAnchor.constraint(equalTo: torchButton.trailingAnchor, constant: 8),
+            filterButton.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
+            filterButton.widthAnchor.constraint(equalToConstant: 40),
+            filterButton.heightAnchor.constraint(equalToConstant: 40),
 
+            sourceButton.centerXAnchor.constraint(equalTo: topBar.centerXAnchor),
+            sourceButton.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
+
+            settingsButton.trailingAnchor.constraint(equalTo: topBar.trailingAnchor),
+            settingsButton.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
+            settingsButton.widthAnchor.constraint(equalToConstant: 40),
+            settingsButton.heightAnchor.constraint(equalToConstant: 40),
+
+            // Toolbar
+            toolbarView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            toolbarView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            toolbarView.bottomAnchor.constraint(equalTo: bottomView.topAnchor, constant: -12),
+            toolbarView.heightAnchor.constraint(equalToConstant: 60),
+
+            tbStack.topAnchor.constraint(equalTo: toolbarView.topAnchor),
+            tbStack.leadingAnchor.constraint(equalTo: toolbarView.leadingAnchor, constant: 8),
+            tbStack.trailingAnchor.constraint(equalTo: toolbarView.trailingAnchor, constant: -8),
+            tbStack.bottomAnchor.constraint(equalTo: toolbarView.bottomAnchor),
+
+            // Bottom view
+            bottomView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            bottomView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            bottomView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+            bottomView.heightAnchor.constraint(equalToConstant: 80),
+
+            // Connections view
+            connectionsView.leadingAnchor.constraint(equalTo: bottomView.leadingAnchor),
+            connectionsView.centerYAnchor.constraint(equalTo: bottomView.centerYAnchor),
+            connectionsView.widthAnchor.constraint(equalToConstant: 62),
+            connectionsView.heightAnchor.constraint(equalToConstant: 62),
+
+            connIconView.topAnchor.constraint(equalTo: connectionsView.topAnchor, constant: 10),
+            connIconView.centerXAnchor.constraint(equalTo: connectionsView.centerXAnchor),
+            connIconView.widthAnchor.constraint(equalToConstant: 22),
+            connIconView.heightAnchor.constraint(equalToConstant: 18),
+
+            connectionsLabel.topAnchor.constraint(equalTo: connIconView.bottomAnchor, constant: 4),
+            connectionsLabel.centerXAnchor.constraint(equalTo: connectionsView.centerXAnchor),
+
+            // Stream button
+            streamButton.centerXAnchor.constraint(equalTo: bottomView.centerXAnchor),
+            streamButton.centerYAnchor.constraint(equalTo: bottomView.centerYAnchor),
+            streamButton.widthAnchor.constraint(equalToConstant: 72),
+            streamButton.heightAnchor.constraint(equalToConstant: 72),
+
+            innerRing.centerXAnchor.constraint(equalTo: streamButton.centerXAnchor),
+            innerRing.centerYAnchor.constraint(equalTo: streamButton.centerYAnchor),
+            innerRing.widthAnchor.constraint(equalToConstant: 58),
+            innerRing.heightAnchor.constraint(equalToConstant: 58),
+
+            // Switch camera
+            switchButton.trailingAnchor.constraint(equalTo: bottomView.trailingAnchor),
+            switchButton.centerYAnchor.constraint(equalTo: bottomView.centerYAnchor),
+            switchButton.widthAnchor.constraint(equalToConstant: 48),
+            switchButton.heightAnchor.constraint(equalToConstant: 48),
+
+            // Manual controls
             manualControls.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
             manualControls.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
-            manualControls.bottomAnchor.constraint(equalTo: bottomBar.topAnchor, constant: -12),
+            manualControls.bottomAnchor.constraint(equalTo: toolbarView.topAnchor, constant: -12),
         ])
     }
 
-    private func configureButton(_ button: UIButton, systemImage: String, action: Selector) {
-        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+    private func configureCircleButton(_ button: UIButton, systemImage: String, action: Selector) {
+        let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)
         button.setImage(UIImage(systemName: systemImage, withConfiguration: config), for: .normal)
-        button.tintColor = .white
+        button.tintColor        = .white
+        button.backgroundColor  = UIColor(white: 0.2, alpha: 0.75)
+        button.layer.cornerRadius = 20
+        button.clipsToBounds    = true
         button.addTarget(self, action: action, for: .touchUpInside)
+    }
+
+    private func configureToolbarButton(_ button: UIButton, systemImage: String?, action: Selector?) {
+        if let name = systemImage {
+            let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+            button.setImage(UIImage(systemName: name, withConfiguration: config), for: .normal)
+        }
+        button.tintColor = .white
+        if let action = action {
+            button.addTarget(self, action: action, for: .touchUpInside)
+        }
     }
 }
 
@@ -386,7 +592,7 @@ extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate,
         guard ndiStreamer.isStreaming else { return }
         if output === videoOutput {
             ndiStreamer.sendVideoFrame(sampleBuffer, fps: targetFPS)
-        } else if output === audioOutput {
+        } else if output === audioOutput, !micMuted {
             ndiStreamer.sendAudioFrame(sampleBuffer)
         }
     }
