@@ -6,7 +6,7 @@ final class CameraViewController: UIViewController {
 
     // MARK: Dependencies
 
-    private let ndiStreamer = NDIStreamer()
+    private let ndiStreamer  = NDIStreamer()
     private let audioManager = AudioManager()
     private var cancellables = Set<AnyCancellable>()
 
@@ -16,6 +16,8 @@ final class CameraViewController: UIViewController {
     private let videoOutput    = AVCaptureVideoDataOutput()
     private let audioOutput    = AVCaptureAudioDataOutput()
     private let captureQueue   = DispatchQueue(label: "com.ndiwebcam.capture", qos: .userInteractive)
+    // All AVCaptureDevice lockForConfiguration calls go here — never block the main thread.
+    private let configQueue    = DispatchQueue(label: "com.ndiwebcam.config",  qos: .userInitiated)
     private var currentDevice: AVCaptureDevice?
     private var previewLayer: AVCaptureVideoPreviewLayer!
     private var usingFrontCamera = false
@@ -28,7 +30,6 @@ final class CameraViewController: UIViewController {
     // MARK: UI
 
     private let previewContainer = UIView()
-    private let controlsOverlay  = UIView()
     private let streamButton     = UIButton(type: .system)
     private let switchButton     = UIButton(type: .system)
     private let torchButton      = UIButton(type: .system)
@@ -60,9 +61,7 @@ final class CameraViewController: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        if captureSession.isRunning {
-            captureSession.stopRunning()
-        }
+        if captureSession.isRunning { captureSession.stopRunning() }
         if ndiStreamer.isStreaming { stopStreaming() }
     }
 
@@ -88,12 +87,10 @@ final class CameraViewController: UIViewController {
     private func setupCaptureSession() {
         captureSession.beginConfiguration()
         captureSession.sessionPreset = targetResolution
-
         addCameraInput(front: false)
         addAudioInput()
         addVideoOutput()
         addAudioOutputs()
-
         captureSession.commitConfiguration()
         captureQueue.async { self.captureSession.startRunning() }
     }
@@ -106,20 +103,25 @@ final class CameraViewController: UIViewController {
 
         let position: AVCaptureDevice.Position = front ? .front : .back
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position),
-              let input = try? AVCaptureDeviceInput(device: device),
+              let input  = try? AVCaptureDeviceInput(device: device),
               captureSession.canAddInput(input)
         else { return }
 
         captureSession.addInput(input)
-        currentDevice = device
+        currentDevice    = device
         usingFrontCamera = front
 
         configureFPS(device: device, fps: targetFPS)
+
+        // Sync slider ranges to this device's actual capabilities.
+        DispatchQueue.main.async { [weak self] in
+            self?.updateDeviceRanges(device: device)
+        }
     }
 
     private func addAudioInput() {
         guard let device = AVCaptureDevice.default(for: .audio),
-              let input = try? AVCaptureDeviceInput(device: device),
+              let input  = try? AVCaptureDeviceInput(device: device),
               captureSession.canAddInput(input)
         else { return }
         captureSession.addInput(input)
@@ -142,15 +144,30 @@ final class CameraViewController: UIViewController {
     }
 
     private func configureFPS(device: AVCaptureDevice, fps: Int32) {
-        guard let range = device.activeFormat.videoSupportedFrameRateRanges.first(where: {
+        guard device.activeFormat.videoSupportedFrameRateRanges.contains(where: {
             $0.maxFrameRate >= Double(fps)
         }) else { return }
-        do {
-            try device.lockForConfiguration()
-            device.activeVideoMinFrameDuration = CMTimeMake(value: 1, timescale: fps)
-            device.activeVideoMaxFrameDuration = CMTimeMake(value: 1, timescale: fps)
-            device.unlockForConfiguration()
-        } catch {}
+        configQueue.async {
+            do {
+                try device.lockForConfiguration()
+                device.activeVideoMinFrameDuration = CMTimeMake(value: 1, timescale: fps)
+                device.activeVideoMaxFrameDuration = CMTimeMake(value: 1, timescale: fps)
+                device.unlockForConfiguration()
+            } catch {}
+        }
+    }
+
+    // Reads actual ISO and shutter limits from the active format and updates the sliders.
+    private func updateDeviceRanges(device: AVCaptureDevice) {
+        let fmt = device.activeFormat
+        manualControls.isoRange = fmt.minISO...fmt.maxISO
+
+        let minDur = max(CMTimeGetSeconds(fmt.minExposureDuration), 1.0 / 8000)
+        let maxDur = min(CMTimeGetSeconds(fmt.maxExposureDuration), 1.0 / 3)
+        manualControls.shutterRange = (
+            CMTimeMakeWithSeconds(minDur, preferredTimescale: 1_000_000),
+            CMTimeMakeWithSeconds(maxDur, preferredTimescale: 1_000_000)
+        )
     }
 
     // MARK: Streaming
@@ -193,12 +210,15 @@ final class CameraViewController: UIViewController {
 
     @objc private func toggleTorch() {
         guard let device = currentDevice, device.hasTorch, !usingFrontCamera else { return }
-        do {
-            try device.lockForConfiguration()
-            device.torchMode = device.torchMode == .on ? .off : .on
-            device.unlockForConfiguration()
-            updateTorchButton()
-        } catch {}
+        let newMode: AVCaptureDevice.TorchMode = device.torchMode == .on ? .off : .on
+        configQueue.async { [weak self] in
+            do {
+                try device.lockForConfiguration()
+                device.torchMode = newMode
+                device.unlockForConfiguration()
+            } catch {}
+            DispatchQueue.main.async { self?.updateTorchButton() }
+        }
     }
 
     private func updateTorchButton() {
@@ -221,25 +241,28 @@ final class CameraViewController: UIViewController {
     // MARK: Tap to Focus
 
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
-        let point = gesture.location(in: previewContainer)
+        let point      = gesture.location(in: previewContainer)
         let normalised = previewLayer.captureDevicePointConverted(fromLayerPoint: point)
         setFocusPoint(normalised)
+        FocusReticleView().show(at: point, in: previewContainer)
     }
 
     private func setFocusPoint(_ point: CGPoint) {
         guard let device = currentDevice else { return }
-        do {
-            try device.lockForConfiguration()
-            if device.isFocusPointOfInterestSupported {
-                device.focusPointOfInterest = point
-                device.focusMode = .autoFocus
-            }
-            if device.isExposurePointOfInterestSupported {
-                device.exposurePointOfInterest = point
-                device.exposureMode = .autoExpose
-            }
-            device.unlockForConfiguration()
-        } catch {}
+        configQueue.async {
+            do {
+                try device.lockForConfiguration()
+                if device.isFocusPointOfInterestSupported {
+                    device.focusPointOfInterest = point
+                    device.focusMode = .autoFocus
+                }
+                if device.isExposurePointOfInterestSupported {
+                    device.exposurePointOfInterest = point
+                    device.exposureMode = .autoExpose
+                }
+                device.unlockForConfiguration()
+            } catch {}
+        }
     }
 
     // MARK: Status
@@ -247,7 +270,7 @@ final class CameraViewController: UIViewController {
     private func startStatusUpdates() {
         statusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self else { return }
-            let count = self.ndiStreamer.connectedReceiverCount
+            let count  = self.ndiStreamer.connectedReceiverCount
             let suffix = count == 1 ? "receiver" : "receivers"
             self.statusLabel.text = "\(count) \(suffix)"
         }
@@ -268,7 +291,6 @@ final class CameraViewController: UIViewController {
             target: self, action: #selector(openSettings)
         )
 
-        // Preview container fills the view
         previewContainer.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(previewContainer)
 
@@ -276,36 +298,32 @@ final class CameraViewController: UIViewController {
         previewLayer.videoGravity = .resizeAspectFill
         previewContainer.layer.addSublayer(previewLayer)
 
-        // Tap-to-focus
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         previewContainer.addGestureRecognizer(tap)
 
-        // Tally indicator
         tallyView.backgroundColor = .systemRed
         tallyView.layer.cornerRadius = 8
         tallyView.isHidden = true
         tallyView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(tallyView)
 
-        // Status label
-        statusLabel.text = "Ready"
+        statusLabel.text      = "Ready"
         statusLabel.textColor = .white
-        statusLabel.font = .systemFont(ofSize: 14)
+        statusLabel.font      = .systemFont(ofSize: 14)
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(statusLabel)
 
-        // Bottom controls
         let bottomBar = UIStackView()
-        bottomBar.axis = .horizontal
-        bottomBar.spacing = 20
-        bottomBar.alignment = .center
+        bottomBar.axis         = .horizontal
+        bottomBar.spacing      = 20
+        bottomBar.alignment    = .center
         bottomBar.distribution = .equalSpacing
         bottomBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(bottomBar)
 
-        configureButton(switchButton, systemImage: "arrow.triangle.2.circlepath.camera", action: #selector(switchCamera))
-        configureButton(torchButton,  systemImage: "flashlight.off.fill", action: #selector(toggleTorch))
-        configureButton(controlsToggle, systemImage: "slider.horizontal.3", action: #selector(toggleManualControls))
+        configureButton(switchButton,   systemImage: "arrow.triangle.2.circlepath.camera", action: #selector(switchCamera))
+        configureButton(torchButton,    systemImage: "flashlight.off.fill",                action: #selector(toggleTorch))
+        configureButton(controlsToggle, systemImage: "slider.horizontal.3",               action: #selector(toggleManualControls))
 
         streamButton.setTitle("Go Live", for: .normal)
         streamButton.tintColor = .white
@@ -317,7 +335,6 @@ final class CameraViewController: UIViewController {
         bottomBar.addArrangedSubview(streamButton)
         bottomBar.addArrangedSubview(controlsToggle)
 
-        // Manual controls panel
         manualControls.delegate = self
         manualControls.isHidden = true
         manualControls.translatesAutoresizingMaskIntoConstraints = false
@@ -356,7 +373,7 @@ final class CameraViewController: UIViewController {
     }
 }
 
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+// MARK: - AVCapture delegates
 
 extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate,
                                  AVCaptureAudioDataOutputSampleBufferDelegate {
@@ -381,56 +398,78 @@ extension CameraViewController: ManualControlsDelegate {
 
     func manualControls(_ view: ManualControlsView, didChangeExposure bias: Float) {
         guard let device = currentDevice else { return }
-        do {
-            try device.lockForConfiguration()
-            device.setExposureTargetBias(bias)
-            device.unlockForConfiguration()
-        } catch {}
+        let clamped = max(device.minExposureTargetBias, min(device.maxExposureTargetBias, bias))
+        configQueue.async {
+            do {
+                try device.lockForConfiguration()
+                device.setExposureTargetBias(clamped)
+                device.unlockForConfiguration()
+            } catch {}
+        }
     }
 
     func manualControls(_ view: ManualControlsView, didChangeISO iso: Float) {
         guard let device = currentDevice else { return }
-        do {
-            try device.lockForConfiguration()
-            device.setExposureModeCustom(duration: AVCaptureDevice.currentExposureDuration, iso: iso)
-            device.unlockForConfiguration()
-        } catch {}
+        let clampedISO = max(device.activeFormat.minISO, min(device.activeFormat.maxISO, iso))
+        let duration   = device.exposureDuration
+        configQueue.async {
+            do {
+                try device.lockForConfiguration()
+                device.setExposureModeCustom(duration: duration, iso: clampedISO)
+                device.unlockForConfiguration()
+            } catch {}
+        }
     }
 
     func manualControls(_ view: ManualControlsView, didChangeShutter duration: CMTime) {
         guard let device = currentDevice else { return }
-        do {
-            try device.lockForConfiguration()
-            device.setExposureModeCustom(duration: duration, iso: AVCaptureDevice.currentISO)
-            device.unlockForConfiguration()
-        } catch {}
+        let currentISO = max(device.activeFormat.minISO,
+                             min(device.activeFormat.maxISO, device.iso))
+        configQueue.async {
+            do {
+                try device.lockForConfiguration()
+                device.setExposureModeCustom(duration: duration, iso: currentISO)
+                device.unlockForConfiguration()
+            } catch {}
+        }
     }
 
     func manualControls(_ view: ManualControlsView, didChangeWhiteBalance temperature: Float) {
         guard let device = currentDevice, device.isWhiteBalanceModeSupported(.locked) else { return }
-        let gains = device.deviceWhiteBalanceGains(for: AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature: temperature, tint: 0))
-        do {
-            try device.lockForConfiguration()
-            device.setWhiteBalanceModeLocked(with: gains)
-            device.unlockForConfiguration()
-        } catch {}
+        let tAndT = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature: temperature, tint: 0)
+        var gains = device.deviceWhiteBalanceGains(for: tAndT)
+        let max   = device.maxWhiteBalanceGain
+        gains.redGain   = Swift.max(1, Swift.min(max, gains.redGain))
+        gains.greenGain = Swift.max(1, Swift.min(max, gains.greenGain))
+        gains.blueGain  = Swift.max(1, Swift.min(max, gains.blueGain))
+        configQueue.async {
+            do {
+                try device.lockForConfiguration()
+                device.setWhiteBalanceModeLocked(with: gains)
+                device.unlockForConfiguration()
+            } catch {}
+        }
     }
 
     func manualControlsDidRequestFocusLock(_ view: ManualControlsView) {
         guard let device = currentDevice, device.isFocusModeSupported(.locked) else { return }
-        do {
-            try device.lockForConfiguration()
-            device.focusMode = .locked
-            device.unlockForConfiguration()
-        } catch {}
+        configQueue.async {
+            do {
+                try device.lockForConfiguration()
+                device.focusMode = .locked
+                device.unlockForConfiguration()
+            } catch {}
+        }
     }
 
     func manualControlsDidRequestAutoFocus(_ view: ManualControlsView) {
         guard let device = currentDevice, device.isFocusModeSupported(.continuousAutoFocus) else { return }
-        do {
-            try device.lockForConfiguration()
-            device.focusMode = .continuousAutoFocus
-            device.unlockForConfiguration()
-        } catch {}
+        configQueue.async {
+            do {
+                try device.lockForConfiguration()
+                device.focusMode = .continuousAutoFocus
+                device.unlockForConfiguration()
+            } catch {}
+        }
     }
 }
